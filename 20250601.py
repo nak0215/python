@@ -353,8 +353,8 @@ def export_data(start_product_code, end_product_code):
 def get_leather_type(product_name):
     # 革の種類のキーワードリスト
     leather_keywords = [
-        "SAMPL", "OXFORD", "LON/BRI", "BRITISH COUNTRY", "SHRUNKEN", "GASTON", "SAFARI", "DERBY", "REGENT",
-        "LON", "CORDOVAN", "ST.JAMES", "SHRUNKEN", "HAMPSTEAD",
+        "SAMPL", "OXFORD", "LON/BRI", "BRITISH COUNTRY", "SHRUNKEN", "SAFARI", "DERBY", "REGENT",
+        "LON", "CORDOVAN", "ST.JAMES", "GASTON", "SHRUNKEN", "HAMPSTEAD",
         "VIN BR", "HORWEEN/BRI", "BR/RUS", "PLAITED", "VTC BADALASSI",
         "BADALASSI", "NATUR/BR", "NATUR", "CAN/TUS", "TUS", "RUSSET", "PLAI",
         "FIX LEATHER", "WEBBNG", "WEBBING", "PASTURE SUEDE", "STIRRUP", "LEATHER BALM", "BR2", "BRI"
@@ -371,7 +371,7 @@ def get_leather_type(product_name):
             if s.startswith("LON") and not s.startswith("LONG"):
                 return keyword
             # ' LONDON'や' LON 'などもOK
-            if re.search(r'\\bLON', s) and not re.search(r'\\bLONG', s):
+            if re.search(r'\bLON', s) and not re.search(r'\bLONG', s):
                 return keyword
         else:
             if keyword in str(product_name):
@@ -888,7 +888,7 @@ tk.Entry(frame3, textvariable=end_product_code_var, width=15).pack(side="left")
 tk.Button(window, text="Excelファイルに出力", command=lambda: export_data(start_product_code_var.get(), end_product_code_var.get())).pack(pady=20)
 
 # === ラジオボタン追加 ===
-db_select_var = tk.StringVar(value="WEB")  # デフォルトはWEB
+db_select_var = tk.StringVar(value="ALL")  # デフォルトはWEB
 radio_frame = tk.Frame(window)
 radio_frame.pack(pady=5)
 tk.Radiobutton(radio_frame, text="店舗", variable=db_select_var, value="店舗").pack(side="left", padx=10)
