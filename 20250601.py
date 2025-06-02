@@ -5,6 +5,23 @@ import sqlite3
 import re
 import os
 
+def get_brand_map():
+    return {
+        "72": "Owen Barry",
+        "52": "Crockett&Jones",
+        "69": "PYRENEX",
+        "01": "BARBARIAN",
+        "71": "BEORMA",
+        "04": "SETTLER",
+        "10": "McROSTIE",
+        "70": "William Lockie",
+        "53": "PASHMINA",
+        "30": "WHITEHOUSE COX",
+        "08": "Anderson & Co",
+        "68": "FILSON",
+        "59": "CANADA GOOSE",
+        "35": "Northern Watters Knitwear"
+    }
 
 def process_file(filename):
     match = re.search(r"(\d{4})年(\d{1,2})月", filename)
@@ -72,24 +89,9 @@ def process_file(filename):
     if "品名" in df_selected.columns and "品番" in df_selected.columns:
         df_selected.loc[df_selected["品名"] == "送料", "品番"] = "979900010199"
 
-    #ブランド名追加
-    brand_map = {
-    "72": "Owen Barry",
-    "52": "Crockett&Jones",
-    "69": "PYRENEX",
-    "01": "BARBARIAN",
-    "71": "BEORMA",
-    "04": "SETTLER",
-    "10": "McROSTIE",
-    "70": "William Lockie",
-    "53": "PASHMINA",
-    "30": "WHITEHOUSE COX",
-    "08": "Anderson & Co",
-    "68": "FILSON",
-    "59": "CANADA GOOSE",
-    "35": "Northern Watters Knitwear"
-    }
-    df_selected["ブランド"] = df_selected.loc[:, "ブランド"] = df_selected["品番"].astype(str).str[:2].map(brand_map).fillna("その他")
+    # ブランド名追加
+    brand_map = get_brand_map()
+    df_selected["ブランド"] = df_selected["品番"].astype(str).str[:2].map(brand_map).fillna("その他")
 
 
     # マイナス金額補完処理（前の販売日コピー）
@@ -226,23 +228,8 @@ def process_fukuoka_file(filename):
     df_selected["年"] = year
     df_selected["月"] = month
 
-    # ブランド名追加（process_fileの74行目と同じ処理）
-    brand_map = {
-        "72": "Owen Barry",
-        "52": "Crockett&Jones",
-        "69": "PYRENEX",
-        "01": "BARBARIAN",
-        "71": "BEORMA",
-        "04": "SETTLER",
-        "10": "McROSTIE",
-        "70": "William Lockie",
-        "53": "PASHMINA",
-        "30": "WHITEHOUSE COX",
-        "08": "Anderson & Co",
-        "68": "FILSON",
-        "59": "CANADA GOOSE",
-        "35": "Northern Watters Knitwear"
-    }
+    # ブランド名追加（関数化したget_brand_mapを利用）
+    brand_map = get_brand_map()
     df_selected["ブランド"] = df_selected["品番"].astype(str).str[:2].map(brand_map).fillna("その他")
 
     # DBへINSERT
@@ -366,15 +353,29 @@ def export_data(start_product_code, end_product_code):
 def get_leather_type(product_name):
     # 革の種類のキーワードリスト
     leather_keywords = [
-        "SAMPL", "OXFORD","LON/BRI","BRITISH COUNTRY","SHRUNKEN","GASTON","SAFARI","DERBY","REGENT",
-        "LON","CORDOVAN","ST.JAMES","SHRUNKEN","HAMPSTEAD",
+        "SAMPL", "OXFORD", "LON/BRI", "BRITISH COUNTRY", "SHRUNKEN", "GASTON", "SAFARI", "DERBY", "REGENT",
+        "LON", "CORDOVAN", "ST.JAMES", "SHRUNKEN", "HAMPSTEAD",
         "VIN BR", "HORWEEN/BRI", "BR/RUS", "PLAITED", "VTC BADALASSI",
         "BADALASSI", "NATUR/BR", "NATUR", "CAN/TUS", "TUS", "RUSSET", "PLAI",
-        "FIX LEATHER", "WEBBNG", "WEBBING", "PASTURE SUEDE", "STIRRUP", "LEATHER BALM","BR2", "BRI"
+        "FIX LEATHER", "WEBBNG", "WEBBING", "PASTURE SUEDE", "STIRRUP", "LEATHER BALM", "BR2", "BRI"
     ]
     for keyword in leather_keywords:
-        if keyword in str(product_name):
+        # 完全一致のみ判定（部分一致しない）
+        if str(product_name) == keyword:
             return keyword
+    # 部分一致で判定（LONはLONDONなど先頭一致、LONGは除外）
+    for keyword in leather_keywords:
+        if keyword == "LON":
+            s = str(product_name).upper()
+            # LONDONなど先頭一致、LONGは除外
+            if s.startswith("LON") and not s.startswith("LONG"):
+                return keyword
+            # ' LONDON'や' LON 'などもOK
+            if re.search(r'\\bLON', s) and not re.search(r'\\bLONG', s):
+                return keyword
+        else:
+            if keyword in str(product_name):
+                return keyword
     return "その他"
 
 def upload_product_excel():
@@ -422,24 +423,7 @@ def upload_product_excel():
     df["革の種類"] = df["商品名"].apply(get_leather_type)
 
     # ブランド名追加
-    brand_map = {
-        "72": "Owen Barry",
-        "52": "Crockett&Jones",
-        "69": "PYRENEX",
-        "01": "BARBARIAN",
-        "71": "BEORMA",
-        "04": "SETTLER",
-        "10": "McROSTIE",
-        "70": "William Lockie",
-        "53": "PASHMINA",
-        "30": "WHITEHOUSE COX",
-        "08": "Anderson & Co",
-        "68": "FILSON",
-        "59": "CANADA GOOSE",
-        "35": "Northern Watters Knitwear"
-    }
-
-    print(df["品番CD"].astype(str).str[:2].map(brand_map).fillna("その他"))
+    brand_map = get_brand_map()
     df["ブランド"] = df["品番CD"].astype(str).str[:2].map(brand_map).fillna("その他")
 
     # DB登録（UPSERT: 金額は常に更新しない）
@@ -521,13 +505,14 @@ def upload_price_csv():
                 サイズ数計 INTEGER,
                 金額 REAL,
                 革の種類 TEXT,
+                ブランド TEXT,
                 PRIMARY KEY (品番CD, カラーNO)
             )
         """)
         # データを移し替え
         cursor.execute("""
-            INSERT INTO products (商品名, 品番CD, カラーNO, カラー名, サイズ数計, 金額, 革の種類)
-            SELECT 商品名, 品番CD, カラーNO, カラー名, サイズ数計, 金額, 革の種類 FROM products_tmp
+            INSERT INTO products (商品名, 品番CD, カラーNO, カラー名, サイズ数計, 金額, 革の種類, ブランド)
+            SELECT 商品名, 品番CD, カラーNO, カラー名, サイズ数計, 金額, 革の種類, ブランド FROM products_tmp
         """)
         cursor.execute("DROP TABLE IF EXISTS products_tmp")
         conn.commit()
