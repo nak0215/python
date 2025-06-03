@@ -523,7 +523,7 @@ def upload_price_csv():
     df_all.to_csv("商品マスタ.csv", index=False, encoding="utf-8-sig")
     conn.close()
 
-def download_sales_summary():
+def download_sales_summary(selected_brand_var):
     import pandas as pd
     import sqlite3
     import os
@@ -539,7 +539,7 @@ def download_sales_summary():
     end_product_code = end_product_code_var.get()
 
     db_mode = db_select_var.get()  # ラジオボタンの値を取得
-
+    selected_brand = selected_brand_var.get()
     # DB接続
     conn_prod = sqlite3.connect("product.db")
     try:
@@ -548,6 +548,10 @@ def download_sales_summary():
         messagebox.showerror("エラー", f"商品マスタDB読込エラー: {e}")
         conn_prod.close()
         return
+
+    # ブランドでフィルタリング
+    if selected_brand != "(すべて)":
+        df_products = df_products[df_products["ブランド"] == selected_brand]
 
     # --- データ取得 ---
     if db_mode == "WEB":
@@ -634,15 +638,67 @@ def download_sales_summary():
         right_on="品番10",
         how="left"
     )
+    # month_colsをここで定義
+    month_cols = [col for col in summary_pivot.columns if col != "品番10"]
 
     # 商品マスタに無い品番10桁を抽出
     not_in_master = set(df_orders["品番10"]) - set(df_products["結合キー"])
     if not_in_master:
-        # 上2桁が"71"のものだけ抽出
-        not_in_master_71 = sorted([code for code in not_in_master if str(code).startswith("71")])
-        msg = f"商品マスタに存在しない品番（10桁, 先頭2桁=71）: {not_in_master_71}"
-        print(msg)
+        # # 上2桁が"71"のものだけ抽出
+        # not_in_master_71 = sorted([code for code in not_in_master if str(code).startswith("30")])
+        # msg = f"商品マスタに存在しない品番（10桁, 先頭2桁=71）: {not_in_master_71}"
+        # #print(msg)
         # messagebox.showinfo("商品マスタに無い品番(71)", msg)  # 必要ならコメントアウト解除
+
+        # --- 商品マスタに無い品番10桁のデータも出力用に作成 ---
+        # 追加分もブランド・品番範囲でフィルタ
+        filtered_orders = df_orders.copy()
+        if selected_brand != "(すべて)":
+            filtered_orders = filtered_orders[filtered_orders["ブランド"] == selected_brand]
+        if start_product_code and end_product_code:
+            filtered_orders = filtered_orders[
+                (filtered_orders["品番"].str[:8] >= start_product_code[:8]) &
+                (filtered_orders["品番"].str[:8] <= end_product_code[:8])
+            ]
+        # 再集計
+        filtered_orders["点数"] = pd.to_numeric(filtered_orders["点数"], errors="coerce").fillna(0)
+        summary = (
+            filtered_orders.groupby(["品番10", "年月"], as_index=False)["点数"].sum()
+        )
+        summary_pivot_filtered = summary.pivot(index="品番10", columns="年月", values="点数").fillna(0).astype(int).reset_index()
+        not_in_master_filtered = set(filtered_orders["品番10"]) - set(df_products["結合キー"])
+        not_in_master_df = summary_pivot_filtered[summary_pivot_filtered["品番10"].isin(not_in_master_filtered)].copy()
+        # 商品マスタのカラムを空欄で追加（なければ追加）
+        for col in ["品番CD", "商品名", "カラー名", "金額", "カラーNO", "サイズ数計", "革の種類"]:
+            if col not in not_in_master_df.columns:
+                not_in_master_df[col] = pd.NA
+        # 既存の品番CD/商品名/カラー名/金額はordersから埋める
+        for col in ["品番CD", "商品名", "カラー名", "金額"]:
+            if col == "品番CD":
+                not_in_master_df[col] = not_in_master_df["品番10"].str[:8] #+ "00"
+            elif col == "商品名":
+                not_in_master_df[col] = not_in_master_df["品番10"].map(
+                    df_orders.drop_duplicates("品番10").set_index("品番10")["品名"]
+                )
+            elif col == "カラー名":
+                not_in_master_df[col] = not_in_master_df["品番10"].map(
+                    df_orders.drop_duplicates("品番10").set_index("品番10")["色"]
+                )
+            elif col == "金額":
+                not_in_master_df[col] = not_in_master_df["品番10"].map(
+                    df_orders.drop_duplicates("品番10").set_index("品番10")["税抜金額"]
+                )
+        # month_colsのうち、not_in_master_dfに無い列は0で追加
+        for col in month_cols:
+            if col not in not_in_master_df.columns:
+                not_in_master_df[col] = 0
+        # 点数合計列を追加
+        not_in_master_df["点数合計"] = not_in_master_df[month_cols].sum(axis=1)
+        # 商品マスタ側と同じ列順に
+        output_cols = ["品番CD", "商品名", "カラーNO", "カラー名", "サイズ数計", "金額", "革の種類"] + month_cols + ["点数合計"]
+        not_in_master_df = not_in_master_df[output_cols]
+        # 既存mergedの末尾に追加
+        merged = pd.concat([merged, not_in_master_df], ignore_index=True)
 
     # 列順序
     base_cols = ["品番CD", "商品名", "カラーNO", "カラー名", "サイズ数計", "金額", "革の種類"]
@@ -846,7 +902,7 @@ def open_upload_window():
 # 統合GUI
 window = tk.Tk()
 window.title("売上データ処理システム")
-window.geometry("400x500")
+window.geometry("400x600")
 
 tk.Button(window, text="アップロード", command=open_upload_window).pack(pady=20)
 
@@ -895,7 +951,27 @@ tk.Radiobutton(radio_frame, text="店舗", variable=db_select_var, value="店舗
 tk.Radiobutton(radio_frame, text="WEB", variable=db_select_var, value="WEB").pack(side="left", padx=10)
 tk.Radiobutton(radio_frame, text="ALL", variable=db_select_var, value="ALL").pack(side="left", padx=10)
 
-tk.Button(window, text="商品別売上集計ダウンロード", command=download_sales_summary).pack(pady=10)
+# === ブランド選択用Combobox追加 ===
+def get_brand_list():
+    conn = sqlite3.connect("product.db")
+    try:
+        df = pd.read_sql("SELECT DISTINCT ブランド FROM products WHERE ブランド IS NOT NULL AND ブランド != ''", conn)
+        brands = sorted(df["ブランド"].dropna().unique().tolist())
+        brands.insert(0, "(すべて)")
+        return brands
+    except Exception as e:
+        print(f"ブランド一覧取得エラー: {e}")
+        return ["(すべて)"]
+    finally:
+        conn.close()
+
+brand_list = get_brand_list()
+selected_brand_var = tk.StringVar(value=brand_list[0])
+tk.Label(window, text="ブランドを選択").pack()
+brand_combo = ttk.Combobox(window, textvariable=selected_brand_var, values=brand_list, width=20, state="readonly")
+brand_combo.pack(pady=5)
+
+tk.Button(window, text="商品別売上集計ダウンロード", command=lambda: download_sales_summary(selected_brand_var)).pack(pady=10)
 
 # 閉じるボタン
 tk.Button(window, text="閉じる", command=window.destroy).pack(pady=20)
