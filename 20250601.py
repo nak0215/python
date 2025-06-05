@@ -535,8 +535,8 @@ def download_sales_summary(selected_brand_var):
     end_month = int(end_month_var.get())
     start_key = start_year * 100 + start_month
     end_key = end_year * 100 + end_month
-    start_product_code = start_product_code_var.get()
-    end_product_code = end_product_code_var.get()
+    # start_product_code = start_product_code_var.get()
+    # end_product_code = end_product_code_var.get()
 
     db_mode = db_select_var.get()  # ラジオボタンの値を取得
     selected_brand = selected_brand_var.get()
@@ -604,11 +604,11 @@ def download_sales_summary(selected_brand_var):
     df_orders = df_orders[(df_orders["年月キー"] >= start_key) & (df_orders["年月キー"] <= end_key)]
 
     # --- ここから品番範囲フィルタをproduct.dbで実施 ---
-    if start_product_code and end_product_code:
-        df_products = df_products[
-            (df_products["品番CD"].str[:8] >= start_product_code[:8]) &
-            (df_products["品番CD"].str[:8] <= end_product_code[:8])
-        ]
+    # if start_product_code and end_product_code:
+    #     df_products = df_products[
+    #         (df_products["品番CD"].str[:8] >= start_product_code[:8]) &
+    #         (df_products["品番CD"].str[:8] <= end_product_code[:8])
+    #     ]
     # --- ここまで ---
 
     # 1. 革の種類が"SAMPL"のものは除外
@@ -655,11 +655,11 @@ def download_sales_summary(selected_brand_var):
         filtered_orders = df_orders.copy()
         if selected_brand != "(すべて)":
             filtered_orders = filtered_orders[filtered_orders["ブランド"] == selected_brand]
-        if start_product_code and end_product_code:
-            filtered_orders = filtered_orders[
-                (filtered_orders["品番"].str[:8] >= start_product_code[:8]) &
-                (filtered_orders["品番"].str[:8] <= end_product_code[:8])
-            ]
+        # if start_product_code and end_product_code:
+        #     filtered_orders = filtered_orders[
+        #         (filtered_orders["品番"].str[:8] >= start_product_code[:8]) &
+        #         (filtered_orders["品番"].str[:8] <= end_product_code[:8])
+        #     ]
         # 再集計
         filtered_orders["点数"] = pd.to_numeric(filtered_orders["点数"], errors="coerce").fillna(0)
         summary = (
@@ -734,9 +734,20 @@ def download_sales_summary(selected_brand_var):
 
     # ファイル名と保存先
     folder = os.path.join(os.path.expanduser("~"), "Downloads")
-    db_mode_str = db_mode  # "店舗"、"WEB"、"ALL" のいずれか
-    filename = f"商品別売上集計{start_year_var.get()}年{start_month_var.get()}月-{end_year_var.get()}年{end_month_var.get()}月_{db_mode_str}.xlsx"
+    start_yy = str(start_year)[-2:]
+    end_yy = str(end_year)[-2:]
+    # ブランド名（(すべて)の場合は全ブランド）
+    brand_for_filename = selected_brand if selected_brand != "(すべて)" else "全ブランド"
+    filename = f"商品別売上集計_{brand_for_filename}_{start_yy}年{start_month}月-{end_yy}年{end_month}月_{db_mode}.xlsx"
     full_path = os.path.join(folder, filename)
+
+    # === 上書き確認を追加 ===
+    if os.path.exists(full_path):
+        overwrite = messagebox.askyesno("確認", f"{filename} は既に存在します。\n上書きしますか？")
+        if not overwrite:
+            messagebox.showinfo("キャンセル", "保存をキャンセルしました。")
+            conn_prod.close()
+            return
 
     # Excel出力（以降は既存のまま）
     try:
@@ -911,7 +922,7 @@ tk.Label(window, text="年月指定してデータをExcelで出力", font=("Ari
 from datetime import datetime
 current_year = datetime.now().year
 current_month = datetime.now().month
-years = list(range(2014, current_year + 1))
+years = list(range(2015, current_year + 1))
 months = list(range(1, 13))
 start_year_var = tk.StringVar(value=str(current_year))
 start_month_var = tk.StringVar(value=str(current_month - 1))
@@ -931,17 +942,17 @@ ttk.Combobox(frame2, textvariable=end_year_var, values=years, width=6).pack(side
 ttk.Combobox(frame2, textvariable=end_month_var, values=months, width=4).pack(side="left")
 
 # "品番" 範囲指定用テキストボックス
-tk.Label(window, text="③ 品番を指定（範囲指定: 12桁）").pack(pady=10)
-frame3 = tk.Frame(window)
-frame3.pack()
-tk.Label(frame3, text="開始品番:").pack(side="left")
-start_product_code_var = tk.StringVar()
-tk.Entry(frame3, textvariable=start_product_code_var, width=15).pack(side="left")
-tk.Label(frame3, text="終了品番:").pack(side="left")
-end_product_code_var = tk.StringVar()
-tk.Entry(frame3, textvariable=end_product_code_var, width=15).pack(side="left")
+# tk.Label(window, text="③ 品番を指定（範囲指定: 12桁）").pack(pady=10)
+# frame3 = tk.Frame(window)
+# frame3.pack()
+# tk.Label(frame3, text="開始品番:").pack(side="left")
+# start_product_code_var = tk.StringVar()
+# tk.Entry(frame3, textvariable=start_product_code_var, width=15).pack(side="left")
+# tk.Label(frame3, text="終了品番:").pack(side="left")
+# end_product_code_var = tk.StringVar()
+# tk.Entry(frame3, textvariable=end_product_code_var, width=15).pack(side="left")
 
-tk.Button(window, text="Excelファイルに出力", command=lambda: export_data(start_product_code_var.get(), end_product_code_var.get())).pack(pady=20)
+# tk.Button(window, text="Excelファイルに出力", command=lambda: export_data(start_product_code_var.get(), end_product_code_var.get())).pack(pady=20)
 
 # === ラジオボタン追加 ===
 db_select_var = tk.StringVar(value="ALL")  # デフォルトはWEB
