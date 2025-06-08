@@ -564,6 +564,58 @@ def download_sales_summary(selected_brand_var):
             conn_frame.close()
             return
         conn_frame.close()
+        # === ギフト列を必ずint型(0/1)に変換 ===
+        if "ギフト" in df_orders.columns:
+            df_orders["ギフト"] = pd.to_numeric(df_orders["ギフト"], errors="coerce").fillna(0).astype(int)
+        # === WEB時のみフィルタ適用 ===
+        # 年齢
+        if "年齢" in df_orders.columns:
+            df_orders["年齢"] = pd.to_numeric(df_orders["年齢"], errors="coerce")
+        age = filter_age_var.get()
+        if age != "ALL" and "年齢" in df_orders.columns:
+            if age == "10代以下":
+                df_orders = df_orders[df_orders["年齢"] < 20]
+            elif age == "60代以上":
+                df_orders = df_orders[df_orders["年齢"] >= 60]
+            else:
+                try:
+                    age_num = int(age[:2])
+                    df_orders = df_orders[(df_orders["年齢"] >= age_num) & (df_orders["年齢"] < age_num+10)]
+                except:
+                    pass
+        # 性別
+        gender = filter_gender_var.get()
+        if gender != "ALL" and "性別" in df_orders.columns:
+            if gender == "男性":
+                df_orders = df_orders[df_orders["性別"].isin(["RM", "M"])]
+            elif gender == "女性":
+                df_orders = df_orders[df_orders["性別"].isin(["RL", "L"])]
+        # 居住地
+        region = filter_region_var.get()
+        if region != "ALL" and "居住地" in df_orders.columns:
+            region_map = {
+                "北海道地方": ["北海道"],
+                "東北地方": ["青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県"],
+                "関東地方": ["東京都", "神奈川県", "千葉県", "埼玉県", "茨城県", "栃木県", "群馬県"],
+                "中部地方": ["新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県"],
+                "近畿地方": ["大阪府", "兵庫県", "京都府", "滋賀県", "奈良県", "和歌山県", "三重県"],
+                "中国地方": ["鳥取県", "島根県", "岡山県", "広島県", "山口県"],
+                "四国地方": ["徳島県", "香川県", "愛媛県", "高知県"],
+                "九州地方": ["福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県","沖縄県"]
+            }
+            if region in region_map:
+                df_orders = df_orders[df_orders["居住地"].isin(region_map[region])]
+            else:
+                df_orders = df_orders[df_orders["居住地"] == region]
+        # ギフト
+        gift = filter_gift_var.get()
+        if gift != "ALL" and "ギフト" in df_orders.columns:
+            # ギフト列を必ずint型に変換
+            df_orders["ギフト"] = pd.to_numeric(df_orders["ギフト"], errors="coerce").fillna(0).astype(int)
+            if gift == "あり":
+                df_orders = df_orders[df_orders["ギフト"] == 1]
+            elif gift == "なし":
+                df_orders = df_orders[df_orders["ギフト"] == 0]
     elif db_mode == "店舗":
         conn_fukuoka = sqlite3.connect("framefukuoka.db")
         try:
@@ -603,52 +655,23 @@ def download_sales_summary(selected_brand_var):
     df_orders["年月キー"] = (df_orders["年"].astype(int) * 100 + df_orders["月"].astype(int)).astype("Int64")
     df_orders = df_orders[(df_orders["年月キー"] >= start_key) & (df_orders["年月キー"] <= end_key)]
 
-    # === 詳細絞り込み反映 ===
-    # 年齢フィルタ
-    if filter_age_var.get() != "ALL" and "年齢" in df_orders.columns:
-        if filter_age_var.get() == "10代以下":
-            df_orders = df_orders[df_orders["年齢"].astype(float) <= 19]
-        elif filter_age_var.get() == "20代":
-            df_orders = df_orders[(df_orders["年齢"].astype(float) >= 20) & (df_orders["年齢"].astype(float) <= 29)]
-        elif filter_age_var.get() == "30代":
-            df_orders = df_orders[(df_orders["年齢"].astype(float) >= 30) & (df_orders["年齢"].astype(float) <= 39)]
-        elif filter_age_var.get() == "40代":
-            df_orders = df_orders[(df_orders["年齢"].astype(float) >= 40) & (df_orders["年齢"].astype(float) <= 49)]
-        elif filter_age_var.get() == "50代":
-            df_orders = df_orders[(df_orders["年齢"].astype(float) >= 50) & (df_orders["年齢"].astype(float) <= 59)]
-        elif filter_age_var.get() == "60代以上":
-            df_orders = df_orders[df_orders["年齢"].astype(float) >= 60]
-    # 性別フィルタ
-    if filter_gender_var.get() != "ALL" and "性別" in df_orders.columns:
-        if filter_gender_var.get() == "男性":
-            df_orders = df_orders[df_orders["性別"].isin(["M", "RM"])]
-        elif filter_gender_var.get() == "女性":
-            df_orders = df_orders[df_orders["性別"].isin(["L", "RL"])]
-    # 居住地フィルタ
-    if filter_region_var.get() != "ALL" and "居住地" in df_orders.columns:
-        region_map = {
-            "北海道地方": ["北海道"],
-            "東北地方": ["青森", "岩手", "宮城", "秋田", "山形", "福島"],
-            "関東地方": ["茨城", "栃木", "群馬", "埼玉", "千葉", "東京", "神奈川"],
-            "中部地方": ["新潟", "富山", "石川", "福井", "山梨", "長野", "岐阜", "静岡", "愛知"],
-            "近畿地方": ["三重", "滋賀", "京都", "大阪", "兵庫", "奈良", "和歌山"],
-            "中国地方": ["鳥取", "島根", "岡山", "広島", "山口"],
-            "四国地方": ["徳島", "香川", "愛媛", "高知"],
-            "九州地方": ["福岡", "佐賀", "長崎", "熊本", "大分", "宮崎", "鹿児島"],
-            "沖縄県": ["沖縄"]
-        }
-        region = filter_region_var.get()
-        if region in region_map:
-            df_orders = df_orders[df_orders["居住地"].str.contains('|'.join(region_map[region]), na=False)]
-        elif region == "沖縄県":
-            df_orders = df_orders[df_orders["居住地"].str.contains("沖縄", na=False)]
-    # ギフトフィルタ
-    if filter_gift_var.get() != "ALL" and "ギフト" in df_orders.columns:
-        if filter_gift_var.get() == "あり":
-            df_orders = df_orders[df_orders["ギフト"] == 1]
-        elif filter_gift_var.get() == "なし":
-            df_orders = df_orders[df_orders["ギフト"] == 0]
-    # ...existing code...
+    # --- ここから品番範囲フィルタをproduct.dbで実施 ---
+    # if start_product_code and end_product_code:
+    #     df_products = df_products[
+    #         (df_products["品番CD"].str[:8] >= start_product_code[:8]) &
+    #         (df_products["品番CD"].str[:8] <= end_product_code[:8])
+    #     ]
+    # --- ここまで ---
+
+    # 1. 革の種類が"SAMPL"のものは除外
+    df_products = df_products[df_products["革の種類"] != "SAMPL"]
+    # 金額が空（NaNやNone）のものも除外
+    if "金額" in df_products.columns:
+        df_products = df_products[df_products["金額"].notna()]
+
+    # frame側の品番10桁列とproduct側の結合キー列を作成
+    df_orders["品番10"] = df_orders["品番"].astype(str).str[:10]
+    df_products["結合キー"] = df_products["品番CD"].astype(str) + "0" + df_products["カラーNO"].astype(str)
 
     # 月ごとにワイド形式で集計
     df_orders["点数"] = pd.to_numeric(df_orders["点数"], errors="coerce").fillna(0)
@@ -942,7 +965,7 @@ def open_upload_window():
 # 統合GUI
 window = tk.Tk()
 window.title("売上データ処理システム")
-window.geometry("400x600")
+window.geometry("600x600")
 
 tk.Button(window, text="アップロード", command=open_upload_window).pack(pady=20)
 
@@ -1011,94 +1034,53 @@ tk.Label(window, text="ブランドを選択").pack()
 brand_combo = ttk.Combobox(window, textvariable=selected_brand_var, values=brand_list, width=20, state="readonly")
 brand_combo.pack(pady=5)
 
-tk.Button(window, text="商品別売上集計ダウンロード", command=lambda: download_sales_summary(selected_brand_var)).pack(pady=10)
+# === WEB時のみ表示するフィルタUI ===
+filter_frame = tk.Frame(window)
 
-# === 詳細選択ボタン追加 ===
-# 絞り込み条件のグローバル変数
+# 年齢
 filter_age_var = tk.StringVar(value="ALL")
+tk.Label(filter_frame, text="年齢").grid(row=0, column=0, sticky="w", padx=5)
+age_options = ["ALL", "10代以下", "20代", "30代", "40代", "50代", "60代以上"]
+for i, label in enumerate(age_options):
+    tk.Radiobutton(filter_frame, text=label, variable=filter_age_var, value=label).grid(row=0, column=i+1, sticky="w")
+
+# 性別
 filter_gender_var = tk.StringVar(value="ALL")
+tk.Label(filter_frame, text="性別").grid(row=1, column=0, sticky="w", padx=5)
+gender_options = ["ALL", "男性", "女性"]
+for i, label in enumerate(gender_options):
+    tk.Radiobutton(filter_frame, text=label, variable=filter_gender_var, value=label).grid(row=1, column=i+1, sticky="w")
+
+# 居住地
 filter_region_var = tk.StringVar(value="ALL")
-filter_gift_var = tk.StringVar(value="ALL")
-
-# 居住地リスト（例：主要地方＋ALL）
 region_list = [
-    "ALL", "北海道地方", "東北地方", "関東地方", "中部地方", "近畿地方", "中国地方", "四国地方", "九州地方", "沖縄県"
+    "ALL", "北海道地方", "東北地方", "関東地方", "中部地方", "近畿地方", "中国地方", "四国地方", "九州地方"
 ]
+tk.Label(filter_frame, text="居住地").grid(row=2, column=0, sticky="w", padx=5)
+region_combo = ttk.Combobox(filter_frame, textvariable=filter_region_var, values=region_list, width=12, state="readonly")
+region_combo.grid(row=2, column=1, sticky="w")
 
-def open_detail_filter_window():
-    detail_win = tk.Toplevel(window)
-    detail_win.title("詳細絞り込み")
-    detail_win.geometry("300x350")
-    # 年齢
-    tk.Label(detail_win, text="年齢").pack(anchor="w", padx=10, pady=(10,0))
-    for label in ["ALL", "10代以下", "20代", "30代", "40代", "50代", "60代以上"]:
-        tk.Radiobutton(detail_win, text=label, variable=filter_age_var, value=label).pack(anchor="w", padx=20)
-    # 性別
-    tk.Label(detail_win, text="性別").pack(anchor="w", padx=10, pady=(10,0))
-    for label in ["ALL", "男性", "女性"]:
-        tk.Radiobutton(detail_win, text=label, variable=filter_gender_var, value=label).pack(anchor="w", padx=20)
-    # 居住地
-    tk.Label(detail_win, text="居住地").pack(anchor="w", padx=10, pady=(10,0))
-    ttk.Combobox(detail_win, textvariable=filter_region_var, values=region_list, width=18, state="readonly").pack(anchor="w", padx=20)
-    # ギフト
-    tk.Label(detail_win, text="ギフト").pack(anchor="w", padx=10, pady=(10,0))
-    for label in ["ALL", "あり", "なし"]:
-        tk.Radiobutton(detail_win, text=label, variable=filter_gift_var, value=label).pack(anchor="w", padx=20)
-    # 閉じるボタン
-    tk.Button(detail_win, text="閉じる", command=detail_win.destroy).pack(pady=15)
+# ギフト
+filter_gift_var = tk.StringVar(value="ALL")
+tk.Label(filter_frame, text="ギフト").grid(row=3, column=0, sticky="w", padx=5)
+gift_options = ["ALL", "あり", "なし"]
+for i, label in enumerate(gift_options):
+    tk.Radiobutton(filter_frame, text=label, variable=filter_gift_var, value=label).grid(row=3, column=i+1, sticky="w")
 
-# ブランド選択の上にボタン追加
-btn_frame = tk.Frame(window)
-btn_frame.pack()
-tk.Button(btn_frame, text="詳細選択", command=open_detail_filter_window).pack(pady=5)
+# 初期状態は非表示
+def update_filter_frame(*args):
+    if db_select_var.get() == "WEB":
+        filter_frame.pack(pady=5)
+    else:
+        filter_frame.pack_forget()
+
+db_select_var.trace_add("write", update_filter_frame)
+update_filter_frame()
+
+# 商品別売上集計ダウンロードボタン
+tk.Button(window, text="商品別売上集計ダウンロード", command=lambda: download_sales_summary(selected_brand_var)).pack(pady=10)
 
 # 閉じるボタン
 tk.Button(window, text="閉じる", command=window.destroy).pack(pady=20)
 
 window.mainloop()
-
-# === 詳細絞り込み反映 ===
-# 年齢フィルタ
-if filter_age_var.get() != "ALL" and "年齢" in df_orders.columns:
-    if filter_age_var.get() == "10代以下":
-        df_orders = df_orders[df_orders["年齢"].astype(float) <= 19]
-    elif filter_age_var.get() == "20代":
-        df_orders = df_orders[(df_orders["年齢"].astype(float) >= 20) & (df_orders["年齢"].astype(float) <= 29)]
-    elif filter_age_var.get() == "30代":
-        df_orders = df_orders[(df_orders["年齢"].astype(float) >= 30) & (df_orders["年齢"].astype(float) <= 39)]
-    elif filter_age_var.get() == "40代":
-        df_orders = df_orders[(df_orders["年齢"].astype(float) >= 40) & (df_orders["年齢"].astype(float) <= 49)]
-    elif filter_age_var.get() == "50代":
-        df_orders = df_orders[(df_orders["年齢"].astype(float) >= 50) & (df_orders["年齢"].astype(float) <= 59)]
-    elif filter_age_var.get() == "60代以上":
-        df_orders = df_orders[df_orders["年齢"].astype(float) >= 60]
-# 性別フィルタ
-if filter_gender_var.get() != "ALL" and "性別" in df_orders.columns:
-    if filter_gender_var.get() == "男性":
-        df_orders = df_orders[df_orders["性別"].isin(["M", "RM"])]
-    elif filter_gender_var.get() == "女性":
-        df_orders = df_orders[df_orders["性別"].isin(["L", "RL"])]
-# 居住地フィルタ
-if filter_region_var.get() != "ALL" and "居住地" in df_orders.columns:
-    region_map = {
-        "北海道地方": ["北海道"],
-        "東北地方": ["青森", "岩手", "宮城", "秋田", "山形", "福島"],
-        "関東地方": ["茨城", "栃木", "群馬", "埼玉", "千葉", "東京", "神奈川"],
-        "中部地方": ["新潟", "富山", "石川", "福井", "山梨", "長野", "岐阜", "静岡", "愛知"],
-        "近畿地方": ["三重", "滋賀", "京都", "大阪", "兵庫", "奈良", "和歌山"],
-        "中国地方": ["鳥取", "島根", "岡山", "広島", "山口"],
-        "四国地方": ["徳島", "香川", "愛媛", "高知"],
-        "九州地方": ["福岡", "佐賀", "長崎", "熊本", "大分", "宮崎", "鹿児島"],
-        "沖縄県": ["沖縄"]
-    }
-    region = filter_region_var.get()
-    if region in region_map:
-        df_orders = df_orders[df_orders["居住地"].str.contains('|'.join(region_map[region]), na=False)]
-    elif region == "沖縄県":
-        df_orders = df_orders[df_orders["居住地"].str.contains("沖縄", na=False)]
-# ギフトフィルタ
-if filter_gift_var.get() != "ALL" and "ギフト" in df_orders.columns:
-    if filter_gift_var.get() == "あり":
-        df_orders = df_orders[df_orders["ギフト"] == 1]
-    elif filter_gift_var.get() == "なし":
-        df_orders = df_orders[df_orders["ギフト"] == 0]
