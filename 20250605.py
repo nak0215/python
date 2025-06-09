@@ -768,15 +768,25 @@ def download_sales_summary(selected_brand_var):
     # =======================
 
     # 3. ソート
-    leather_order = ["BRI", "VIN BR", "NATUR", "VTC BADALASSI", "BADALASSI", "BR/RUS"]
-    merged["__leather_order"] = merged["革の種類"].apply(
-        lambda x: leather_order.index(x) if x in leather_order else len(leather_order)
-    )
-    merged["__品番4"] = merged["品番CD"].str[:4]
-    merged = merged.sort_values(
-        by=["__品番4", "__leather_order", "革の種類", "商品名", "品番CD"],
-        ascending=[True, True, True, True, True]
-    )
+    if selected_brand in ["WHITEHOUSE COX", "BEORMA"]:
+        leather_order = ["BRI", "VIN BR", "NATUR", "VTC BADALASSI", "BADALASSI", "BR/RUS"]
+        merged["__leather_order"] = merged["革の種類"].apply(
+            lambda x: leather_order.index(x) if x in leather_order else len(leather_order)
+        )
+        merged["__品番4"] = merged["品番CD"].str[:4]
+        merged = merged.sort_values(
+            by=["__品番4", "__leather_order", "革の種類", "商品名", "品番CD"],
+            ascending=[True, True, True, True, True]
+        )
+    elif selected_brand in ["Crockett&Jones", "PYRENEX"]:
+        merged["__品番4"] = merged["品番CD"].str[:4]
+        merged = merged.sort_values(
+            by=["__品番4", "商品名"],
+            ascending=[True, True]
+        )
+    else:
+        merged = merged.sort_values(by=["品番CD"], ascending=[True])
+
 
     # 4. ソート後、同じ並びの重複分は指定カラムのみnanにする
     dup_cols = ["品番CD", "商品名", "金額"]
