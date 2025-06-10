@@ -1,2 +1,14 @@
+build/
+dist/
+**/pytz/zoneinfo/
+*.exe
+*.dll
+*.pyc
+*.zip
+*.toc
+*.pyd
+*.pyz
+*.tpl
 *.db
+*.log
 *.csv
