@@ -545,33 +545,29 @@ def download_sales_summary(selected_brand_var):
     end_month = int(end_month_var.get())
     start_key = start_year * 100 + start_month
     end_key = end_year * 100 + end_month
+    # start_product_code = start_product_code_var.get()
+    # end_product_code = end_product_code_var.get()
 
     db_mode = db_select_var.get()  # ラジオボタンの値を取得
     selected_brand = selected_brand_var.get()
     # DB接続
     conn_prod = sqlite3.connect(get_db_path("product.db"))
     try:
-        # ブランドでSQLレベルで抽出
-        if selected_brand != "(すべて)":
-            df_products = pd.read_sql(
-                "SELECT * FROM products WHERE ブランド = ?", conn_prod, params=(selected_brand,)
-            )
-        else:
-            df_products = pd.read_sql("SELECT * FROM products", conn_prod)
+        df_products = pd.read_sql("SELECT * FROM products", conn_prod)
     except Exception as e:
         messagebox.showerror("エラー", f"商品マスタDB読込エラー: {e}")
         conn_prod.close()
         return
 
+    # ブランドでフィルタリング
+    if selected_brand != "(すべて)":
+        df_products = df_products[df_products["ブランド"] == selected_brand]
+
     # --- データ取得 ---
     if db_mode == "WEB":
         conn_frame = sqlite3.connect(get_db_path("frame.db"))
         try:
-            # 年月でSQLレベルで抽出
-            df_orders = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_frame, params=(start_key, end_key)
-            )
+            df_orders = pd.read_sql("SELECT * FROM orders", conn_frame)
         except Exception as e:
             messagebox.showerror("エラー", f"WEB用DB読込エラー: {e}")
             conn_prod.close()
@@ -624,7 +620,6 @@ def download_sales_summary(selected_brand_var):
         # ギフト
         gift = filter_gift_var.get()
         if gift != "ALL" and "ギフト" in df_orders.columns:
-            # ギフト列を必ずint型に変換
             df_orders["ギフト"] = pd.to_numeric(df_orders["ギフト"], errors="coerce").fillna(0).astype(int)
             if gift == "あり":
                 df_orders = df_orders[df_orders["ギフト"] == 1]
@@ -633,10 +628,7 @@ def download_sales_summary(selected_brand_var):
     elif db_mode == "店舗":
         conn_fukuoka = sqlite3.connect(get_db_path("framefukuoka.db"))
         try:
-            df_orders = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_fukuoka, params=(start_key, end_key)
-            )
+            df_orders = pd.read_sql("SELECT * FROM orders", conn_fukuoka)
         except Exception as e:
             messagebox.showerror("エラー", f"店舗用DB読込エラー: {e}")
             conn_prod.close()
@@ -647,14 +639,8 @@ def download_sales_summary(selected_brand_var):
         conn_frame = sqlite3.connect(get_db_path("frame.db"))
         conn_fukuoka = sqlite3.connect(get_db_path("framefukuoka.db"))
         try:
-            df_orders_web = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_frame, params=(start_key, end_key)
-            )
-            df_orders_shop = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_fukuoka, params=(start_key, end_key)
-            )
+            df_orders_web = pd.read_sql("SELECT * FROM orders", conn_frame)
+            df_orders_shop = pd.read_sql("SELECT * FROM orders", conn_fukuoka)
             df_orders = pd.concat([df_orders_web, df_orders_shop], ignore_index=True)
         except Exception as e:
             messagebox.showerror("エラー", f"DB読込エラー: {e}")
@@ -750,8 +736,7 @@ def download_sales_summary(selected_brand_var):
         # 既存の品番CD/商品名/カラー名/金額はordersから埋める
         for col in ["品番CD", "商品名", "カラー名", "金額"]:
             if col == "品番CD":
-                not_in_master_df[col] = not_in_maste
-                r_df["品番10"].str[:8] #+ "00"
+                not_in_master_df[col] = not_in_master_df["品番10"].str[:8] #+ "00"
             elif col == "商品名":
                 not_in_master_df[col] = not_in_master_df["品番10"].map(
                     df_orders.drop_duplicates("品番10").set_index("品番10")["品名"]
@@ -991,38 +976,74 @@ def download_sales_summary_amount(selected_brand_var):
     selected_brand = selected_brand_var.get()
     conn_prod = sqlite3.connect(get_db_path("product.db"))
     try:
-        if selected_brand != "(すべて)":
-            df_products = pd.read_sql(
-                "SELECT * FROM products WHERE ブランド = ?", conn_prod, params=(selected_brand,)
-            )
-        else:
-            df_products = pd.read_sql("SELECT * FROM products", conn_prod)
+        df_products = pd.read_sql("SELECT * FROM products", conn_prod)
     except Exception as e:
         messagebox.showerror("エラー", f"商品マスタDB読込エラー: {e}")
         conn_prod.close()
         return
+    if selected_brand != "(すべて)":
+        df_products = df_products[df_products["ブランド"] == selected_brand]
 
     # --- データ取得 ---
     if db_mode == "WEB":
         conn_frame = sqlite3.connect(get_db_path("frame.db"))
         try:
-            df_orders = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_frame, params=(start_key, end_key)
-            )
+            df_orders = pd.read_sql("SELECT * FROM orders", conn_frame)
         except Exception as e:
             messagebox.showerror("エラー", f"WEB用DB読込エラー: {e}")
             conn_prod.close()
             conn_frame.close()
             return
         conn_frame.close()
+        if "ギフト" in df_orders.columns:
+            df_orders["ギフト"] = pd.to_numeric(df_orders["ギフト"], errors="coerce").fillna(0).astype(int)
+        if "年齢" in df_orders.columns:
+            df_orders["年齢"] = pd.to_numeric(df_orders["年齢"], errors="coerce")
+        age = filter_age_var.get()
+        if age != "ALL" and "年齢" in df_orders.columns:
+            if age == "10代以下":
+                df_orders = df_orders[df_orders["年齢"] < 20]
+            elif age == "60代以上":
+                df_orders = df_orders[df_orders["年齢"] >= 60]
+            else:
+                try:
+                    age_num = int(age[:2])
+                    df_orders = df_orders[(df_orders["年齢"] >= age_num) & (df_orders["年齢"] < age_num+10)]
+                except:
+                    pass
+        gender = filter_gender_var.get()
+        if gender != "ALL" and "性別" in df_orders.columns:
+            if gender == "男性":
+                df_orders = df_orders[df_orders["性別"].isin(["RM", "M"])]
+            elif gender == "女性":
+                df_orders = df_orders[df_orders["性別"].isin(["RL", "L"])]
+        region = filter_region_var.get()
+        if region != "ALL" and "居住地" in df_orders.columns:
+            region_map = {
+                "北海道地方": ["北海道"],
+                "東北地方": ["青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県"],
+                "関東地方": ["東京都", "神奈川県", "千葉県", "埼玉県", "茨城県", "栃木県", "群馬県"],
+                "中部地方": ["新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県"],
+                "近畿地方": ["大阪府", "兵庫県", "京都府", "滋賀県", "奈良県", "和歌山県", "三重県"],
+                "中国地方": ["鳥取県", "島根県", "岡山県", "広島県", "山口県"],
+                "四国地方": ["徳島県", "香川県", "愛媛県", "高知県"],
+                "九州地方": ["福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県","沖縄県"]
+            }
+            if region in region_map:
+                df_orders = df_orders[df_orders["居住地"].isin(region_map[region])]
+            else:
+                df_orders = df_orders[df_orders["居住地"] == region]
+        gift = filter_gift_var.get()
+        if gift != "ALL" and "ギフト" in df_orders.columns:
+            df_orders["ギフト"] = pd.to_numeric(df_orders["ギフト"], errors="coerce").fillna(0).astype(int)
+            if gift == "あり":
+                df_orders = df_orders[df_orders["ギフト"] == 1]
+            elif gift == "なし":
+                df_orders = df_orders[df_orders["ギフト"] == 0]
     elif db_mode == "店舗":
         conn_fukuoka = sqlite3.connect(get_db_path("framefukuoka.db"))
         try:
-            df_orders = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_fukuoka, params=(start_key, end_key)
-            )
+            df_orders = pd.read_sql("SELECT * FROM orders", conn_fukuoka)
         except Exception as e:
             messagebox.showerror("エラー", f"店舗用DB読込エラー: {e}")
             conn_prod.close()
@@ -1033,14 +1054,8 @@ def download_sales_summary_amount(selected_brand_var):
         conn_frame = sqlite3.connect(get_db_path("frame.db"))
         conn_fukuoka = sqlite3.connect(get_db_path("framefukuoka.db"))
         try:
-            df_orders_web = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_frame, params=(start_key, end_key)
-            )
-            df_orders_shop = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_fukuoka, params=(start_key, end_key)
-            )
+            df_orders_web = pd.read_sql("SELECT * FROM orders", conn_frame)
+            df_orders_shop = pd.read_sql("SELECT * FROM orders", conn_fukuoka)
             df_orders = pd.concat([df_orders_web, df_orders_shop], ignore_index=True)
         except Exception as e:
             messagebox.showerror("エラー", f"DB読込エラー: {e}")
@@ -1055,7 +1070,6 @@ def download_sales_summary_amount(selected_brand_var):
         conn_prod.close()
         return
 
-    # --- 金額集計処理 ---
     df_orders["年"] = pd.to_numeric(df_orders["年"], errors="coerce")
     df_orders["月"] = pd.to_numeric(df_orders["月"], errors="coerce")
     df_orders = df_orders.dropna(subset=["年", "月"])
@@ -1063,21 +1077,24 @@ def download_sales_summary_amount(selected_brand_var):
     df_orders["年月キー"] = (df_orders["年"].astype(int) * 100 + df_orders["月"].astype(int)).astype("Int64")
     df_orders = df_orders[(df_orders["年月キー"] >= start_key) & (df_orders["年月キー"] <= end_key)]
 
-    # 商品マスタとordersを結合し、点数×金額を計算
+    df_products = df_products[df_products["革の種類"] != "SAMPL"]
+    if "金額" in df_products.columns:
+        df_products = df_products[df_products["金額"].notna()]
+
     df_orders["品番10"] = df_orders["品番"].astype(str).str[:10]
     df_products["結合キー"] = df_products["品番CD"].astype(str) + "0" + df_products["カラーNO"].astype(str)
-    df_orders = pd.merge(df_orders, df_products[["結合キー", "金額"]], left_on="品番10", right_on="結合キー", how="left")
-    df_orders["金額"] = pd.to_numeric(df_orders["金額"], errors="coerce").fillna(0)
+
+    # --- ここが金額集計のポイント ---
     df_orders["点数"] = pd.to_numeric(df_orders["点数"], errors="coerce").fillna(0)
-    df_orders["売上金額"] = df_orders["点数"] * df_orders["金額"]
-
-    # 月ごとにワイド形式で集計
+    df_orders["税抜金額"] = pd.to_numeric(df_orders["税抜金額"], errors="coerce").fillna(0)
+    df_orders["金額合計"] = df_orders["点数"] * df_orders["税抜金額"]
     summary = (
-        df_orders.groupby(["品番10", "年月"], as_index=False)["売上金額"].sum()
+        df_orders.groupby(["品番10", "年月"], as_index=False)["金額合計"].sum()
     )
-    summary_pivot = summary.pivot(index="品番10", columns="年月", values="売上金額").fillna(0).astype(int).reset_index()
+    summary_pivot = summary.pivot(index="品番10", columns="年月", values="金額合計")
+    summary_pivot = summary_pivot.fillna(0).astype(int)
+    summary_pivot.reset_index(inplace=True)
 
-    # 商品マスタと結合
     merged = pd.merge(
         df_products,
         summary_pivot,
@@ -1086,15 +1103,80 @@ def download_sales_summary_amount(selected_brand_var):
         how="left"
     )
     month_cols = [col for col in summary_pivot.columns if col != "品番10"]
+
+    not_in_master = set(df_orders["品番10"]) - set(df_products["結合キー"])
+    if not_in_master:
+        filtered_orders = df_orders.copy()
+        if selected_brand != "(すべて)":
+            filtered_orders = filtered_orders[filtered_orders["ブランド"] == selected_brand]
+        filtered_orders["点数"] = pd.to_numeric(filtered_orders["点数"], errors="coerce").fillna(0)
+        filtered_orders["税抜金額"] = pd.to_numeric(filtered_orders["税抜金額"], errors="coerce").fillna(0)
+        filtered_orders["金額合計"] = filtered_orders["点数"] * filtered_orders["税抜金額"]
+        summary = (
+            filtered_orders.groupby(["品番10", "年月"], as_index=False)["金額合計"].sum()
+        )
+        summary_pivot_filtered = summary.pivot(index="品番10", columns="年月", values="金額合計").fillna(0).astype(int).reset_index()
+        not_in_master_filtered = set(filtered_orders["品番10"]) - set(df_products["結合キー"])
+        not_in_master_df = summary_pivot_filtered[summary_pivot_filtered["品番10"].isin(not_in_master_filtered)].copy()
+        for col in ["品番CD", "商品名", "カラー名", "金額", "カラーNO", "サイズ数計", "革の種類"]:
+            if col not in not_in_master_df.columns:
+                not_in_master_df[col] = pd.NA
+        for col in ["品番CD", "商品名", "カラー名", "金額"]:
+            if col == "品番CD":
+                not_in_master_df[col] = not_in_master_df["品番10"].str[:8]
+            elif col == "商品名":
+                not_in_master_df[col] = not_in_master_df["品番10"].map(
+                    df_orders.drop_duplicates("品番10").set_index("品番10")["品名"]
+                )
+            elif col == "カラー名":
+                not_in_master_df[col] = not_in_master_df["品番10"].map(
+                    df_orders.drop_duplicates("品番10").set_index("品番10")["色"]
+                )
+            elif col == "金額":
+                not_in_master_df[col] = not_in_master_df["品番10"].map(
+                    df_orders.drop_duplicates("品番10").set_index("品番10")["税抜金額"]
+                )
+        for col in month_cols:
+            if col not in not_in_master_df.columns:
+                not_in_master_df[col] = 0
+        not_in_master_df["金額合計"] = not_in_master_df[month_cols].sum(axis=1)
+        output_cols = ["品番CD", "商品名", "カラーNO", "カラー名", "サイズ数計", "金額", "革の種類"] + month_cols + ["金額合計"]
+        not_in_master_df = not_in_master_df[output_cols]
+        merged = pd.concat([merged, not_in_master_df], ignore_index=True)
+
     base_cols = ["品番CD", "商品名", "カラーNO", "カラー名", "サイズ数計", "金額", "革の種類"]
+    month_cols = [col for col in summary_pivot.columns if col != "品番10"]
     output_cols = base_cols + month_cols
     merged = merged[output_cols]
     merged[month_cols] = merged[month_cols].fillna(0).astype(int)
-    merged["売上金額合計"] = merged[month_cols].sum(axis=1)
-    output_cols = base_cols + month_cols + ["売上金額合計"]
+    merged["金額合計"] = merged[month_cols].sum(axis=1)
+    output_cols = base_cols + month_cols + ["金額合計"]
     merged = merged[output_cols]
 
-    # ファイル名と保存先
+    if selected_brand in ["WHITEHOUSE COX", "BEORMA"]:
+        leather_order = ["BRI", "VIN BR", "NATUR", "VTC BADALASSI", "BADALASSI", "BR/RUS"]
+        merged["__leather_order"] = merged["革の種類"].apply(
+            lambda x: leather_order.index(x) if x in leather_order else len(leather_order)
+        )
+        merged["__品番4"] = merged["品番CD"].str[:4]
+        merged = merged.sort_values(
+            by=["__品番4", "__leather_order", "革の種類", "商品名", "品番CD"],
+            ascending=[True, True, True, True, True]
+        )
+    elif selected_brand in ["Crockett&Jones", "PYRENEX"]:
+        merged["__品番4"] = merged["品番CD"].str[:4]
+        merged = merged.sort_values(
+            by=["__品番4", "商品名"],
+            ascending=[True, True]
+        )
+    else:
+        merged = merged.sort_values(by=["品番CD"], ascending=[True])
+
+    dup_cols = ["品番CD", "商品名", "金額"]
+    mask = merged.duplicated(subset=dup_cols, keep='first')
+    for col in dup_cols:
+        merged.loc[mask, col] = pd.NA
+
     folder = os.path.join(os.path.expanduser("~"), "Downloads")
     start_yy = str(start_year)[-2:]
     end_yy = str(end_year)[-2:]
@@ -1102,14 +1184,12 @@ def download_sales_summary_amount(selected_brand_var):
     filename = f"商品別売上集計_金額_{brand_for_filename}_{start_yy}年{start_month}月-{end_yy}年{end_month}月_{db_mode}.xlsx"
     full_path = os.path.join(folder, filename)
 
-    # 上書き確認
     if os.path.exists(full_path):
         overwrite = messagebox.askyesno("確認", f"{filename} は既に存在します。\n上書きしますか？")
         if not overwrite:
             messagebox.showinfo("キャンセル", "保存をキャンセルしました。")
             conn_prod.close()
             return
-
     try:
         merged.to_excel(full_path, index=False)
         messagebox.showinfo("完了", f"✅ 商品別売上集計（金額）を出力しました：\n{full_path}")
@@ -1254,7 +1334,9 @@ update_filter_frame()
 
 # 商品別売上集計ダウンロードボタン
 tk.Button(window, text="商品別売上集計ダウンロード", command=lambda: download_sales_summary(selected_brand_var)).pack(pady=10)
-tk.Button(window, text="商品別売上集計（金額）ダウンロード", command=lambda: download_sales_summary_amount(selected_brand_var)).pack(pady=10)
+# 商品別売上集計（金額）ダウンロードボタンを追加
+btn_amount = tk.Button(window, text="商品別売上集計（金額）ダウンロード", command=lambda: download_sales_summary_amount(selected_brand_var))
+btn_amount.pack(pady=10)
 
 # 閉じるボタン
 tk.Button(window, text="閉じる", command=window.destroy).pack(pady=20)

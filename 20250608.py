@@ -23,16 +23,6 @@ def get_brand_map():
         "35": "Northern Watters Knitwear"
     }
 
-def get_db_path(db_filename):
-    c_path = os.path.join('C:/Griffin Dropbox/Harada Tetsuro/nakashima/DB', db_filename)
-    d_path = os.path.join('D:/Griffin Dropbox/Harada Tetsuro/nakashima/DB', db_filename)    
-    if os.path.exists(c_path):
-        return c_path
-    elif os.path.exists(d_path):
-        return d_path
-    else:
-        return db_filename  # カレントディレクトリ
-
 def process_file(filename):
     match = re.search(r"(\d{4})年(\d{1,2})月", filename)
     if not match:
@@ -40,7 +30,7 @@ def process_file(filename):
         return
     year, month = int(match.group(1)), int(match.group(2))
 
-    db_name = get_db_path("frame.db")
+    db_name = "frame.db"
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='orders'")
@@ -170,7 +160,7 @@ def process_fukuoka_file(filename):
         return
     year, month = int(match.group(1)), int(match.group(2))
 
-    db_name = get_db_path("framefukuoka.db")
+    db_name = "framefukuoka.db"
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     # テーブル作成（なければ）
@@ -300,7 +290,7 @@ def export_data(start_product_code, end_product_code):
     # ダウンロードフォルダのパスを取得
     folder = os.path.join(os.path.expanduser("~"), "Downloads")
 
-    conn = sqlite3.connect(get_db_path("frame.db"))
+    conn = sqlite3.connect("frame.db")
     df = pd.read_sql("SELECT * FROM orders", conn)
 
     # デバッグ情報: データ型を確認
@@ -396,7 +386,7 @@ def upload_product_excel():
     if not file_path:
         return
     # DB作成・接続
-    db_name = get_db_path("product.db")
+    db_name = "product.db"
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     # productsテーブル作成（なければ）
@@ -469,7 +459,7 @@ def upload_price_csv():
     )
     if not file_path:
         return
-    db_name = get_db_path("product.db")
+    db_name = "product.db"
     conn = sqlite3.connect(db_name)
     try:
         df_csv = pd.read_csv(file_path, dtype=str, encoding="cp932")
@@ -551,7 +541,7 @@ def download_sales_summary(selected_brand_var):
     db_mode = db_select_var.get()  # ラジオボタンの値を取得
     selected_brand = selected_brand_var.get()
     # DB接続
-    conn_prod = sqlite3.connect(get_db_path("product.db"))
+    conn_prod = sqlite3.connect("product.db")
     try:
         df_products = pd.read_sql("SELECT * FROM products", conn_prod)
     except Exception as e:
@@ -565,7 +555,7 @@ def download_sales_summary(selected_brand_var):
 
     # --- データ取得 ---
     if db_mode == "WEB":
-        conn_frame = sqlite3.connect(get_db_path("frame.db"))
+        conn_frame = sqlite3.connect("frame.db")
         try:
             df_orders = pd.read_sql("SELECT * FROM orders", conn_frame)
         except Exception as e:
@@ -627,7 +617,7 @@ def download_sales_summary(selected_brand_var):
             elif gift == "なし":
                 df_orders = df_orders[df_orders["ギフト"] == 0]
     elif db_mode == "店舗":
-        conn_fukuoka = sqlite3.connect(get_db_path("framefukuoka.db"))
+        conn_fukuoka = sqlite3.connect("framefukuoka.db")
         try:
             df_orders = pd.read_sql("SELECT * FROM orders", conn_fukuoka)
         except Exception as e:
@@ -637,8 +627,8 @@ def download_sales_summary(selected_brand_var):
             return
         conn_fukuoka.close()
     elif db_mode == "ALL":
-        conn_frame = sqlite3.connect(get_db_path("frame.db"))
-        conn_fukuoka = sqlite3.connect(get_db_path("framefukuoka.db"))
+        conn_frame = sqlite3.connect("frame.db")
+        conn_fukuoka = sqlite3.connect("framefukuoka.db")
         try:
             df_orders_web = pd.read_sql("SELECT * FROM orders", conn_frame)
             df_orders_shop = pd.read_sql("SELECT * FROM orders", conn_fukuoka)
@@ -778,24 +768,15 @@ def download_sales_summary(selected_brand_var):
     # =======================
 
     # 3. ソート
-    if selected_brand in ["WHITEHOUSE COX", "BEORMA"]:
-        leather_order = ["BRI", "VIN BR", "NATUR", "VTC BADALASSI", "BADALASSI", "BR/RUS"]
-        merged["__leather_order"] = merged["革の種類"].apply(
-            lambda x: leather_order.index(x) if x in leather_order else len(leather_order)
-        )
-        merged["__品番4"] = merged["品番CD"].str[:4]
-        merged = merged.sort_values(
-            by=["__品番4", "__leather_order", "革の種類", "商品名", "品番CD"],
-            ascending=[True, True, True, True, True]
-        )
-    elif selected_brand in ["Crockett&Jones", "PYRENEX"]:
-        merged["__品番4"] = merged["品番CD"].str[:4]
-        merged = merged.sort_values(
-            by=["__品番4", "商品名"],
-            ascending=[True, True]
-        )
-    else:
-        merged = merged.sort_values(by=["品番CD"], ascending=[True])
+    leather_order = ["BRI", "VIN BR", "NATUR", "VTC BADALASSI", "BADALASSI", "BR/RUS"]
+    merged["__leather_order"] = merged["革の種類"].apply(
+        lambda x: leather_order.index(x) if x in leather_order else len(leather_order)
+    )
+    merged["__品番4"] = merged["品番CD"].str[:4]
+    merged = merged.sort_values(
+        by=["__品番4", "__leather_order", "革の種類", "品番CD"],
+        ascending=[True, True, True, True]
+    )
 
     # 4. ソート後、同じ並びの重複分は指定カラムのみnanにする
     dup_cols = ["品番CD", "商品名", "金額"]
@@ -1035,7 +1016,7 @@ tk.Radiobutton(radio_frame, text="ALL", variable=db_select_var, value="ALL").pac
 
 # === ブランド選択用Combobox追加 ===
 def get_brand_list():
-    conn = sqlite3.connect(get_db_path("product.db"))
+    conn = sqlite3.connect("product.db")
     try:
         df = pd.read_sql("SELECT DISTINCT ブランド FROM products WHERE ブランド IS NOT NULL AND ブランド != ''", conn)
         brands = sorted(df["ブランド"].dropna().unique().tolist())
