@@ -678,17 +678,7 @@ def download_sales_summary(selected_brand_var):
     df_orders["年月キー"] = (df_orders["年"].astype(int) * 100 + df_orders["月"].astype(int)).astype("Int64")
     df_orders = df_orders[(df_orders["年月キー"] >= start_key) & (df_orders["年月キー"] <= end_key)]
 
-    # --- ここから品番範囲フィルタをproduct.dbで実施 ---
-    # if start_product_code and end_product_code:
-    #     df_products = df_products[
-    #         (df_products["品番CD"].str[:8] >= start_product_code[:8]) &
-    #         (df_products["品番CD"].str[:8] <= end_product_code[:8])
-    #     ]
-    # --- ここまで ---
-
-    # 1. 革の種類が"SAMPL"のものは除外
     df_products = df_products[df_products["革の種類"] != "SAMPL"]
-    # 金額が空（NaNやNone）のものも除外
     if "金額" in df_products.columns:
         df_products = df_products[df_products["金額"].notna()]
 
@@ -719,23 +709,10 @@ def download_sales_summary(selected_brand_var):
     # 商品マスタに無い品番10桁を抽出
     not_in_master = set(df_orders["品番10"]) - set(df_products["結合キー"])
     if not_in_master:
-        # # 上2桁が"71"のものだけ抽出
-        # not_in_master_71 = sorted([code for code in not_in_master if str(code).startswith("30")])
-        # msg = f"商品マスタに存在しない品番（10桁, 先頭2桁=71）: {not_in_master_71}"
-        # #print(msg)
-        # messagebox.showinfo("商品マスタに無い品番(71)", msg)  # 必要ならコメントアウト解除
 
-        # --- 商品マスタに無い品番10桁のデータも出力用に作成 ---
-        # 追加分もブランド・品番範囲でフィルタ
         filtered_orders = df_orders.copy()
         if selected_brand != "(すべて)":
             filtered_orders = filtered_orders[filtered_orders["ブランド"] == selected_brand]
-        # if start_product_code and end_product_code:
-        #     filtered_orders = filtered_orders[
-        #         (filtered_orders["品番"].str[:8] >= start_product_code[:8]) &
-        #         (filtered_orders["品番"].str[:8] <= end_product_code[:8])
-        #     ]
-        # 再集計
         filtered_orders["点数"] = pd.to_numeric(filtered_orders["点数"], errors="coerce").fillna(0)
         summary = (
             filtered_orders.groupby(["品番10", "年月"], as_index=False)["点数"].sum()
@@ -781,11 +758,7 @@ def download_sales_summary(selected_brand_var):
     month_cols = [col for col in summary_pivot.columns if col != "品番10"]
     output_cols = base_cols + month_cols
     merged = merged[output_cols]
-
-    # 売上が0の場合は0を入れる
     merged[month_cols] = merged[month_cols].fillna(0).astype(int)
-
-    # === 点数合計列を追加 ===
     merged["点数合計"] = merged[month_cols].sum(axis=1)
     output_cols = base_cols + month_cols + ["点数合計"]
     merged = merged[output_cols]
@@ -975,148 +948,6 @@ def download_sales_summary(selected_brand_var):
 
     conn_prod.close()
 
-def download_sales_summary_amount(selected_brand_var):
-    import pandas as pd
-    import sqlite3
-    import os
-
-    start_year = int(start_year_var.get())
-    start_month = int(start_month_var.get())
-    end_year = int(end_year_var.get())
-    end_month = int(end_month_var.get())
-    start_key = start_year * 100 + start_month
-    end_key = end_year * 100 + end_month
-
-    db_mode = db_select_var.get()
-    selected_brand = selected_brand_var.get()
-    conn_prod = sqlite3.connect(get_db_path("product.db"))
-    try:
-        if selected_brand != "(すべて)":
-            df_products = pd.read_sql(
-                "SELECT * FROM products WHERE ブランド = ?", conn_prod, params=(selected_brand,)
-            )
-        else:
-            df_products = pd.read_sql("SELECT * FROM products", conn_prod)
-    except Exception as e:
-        messagebox.showerror("エラー", f"商品マスタDB読込エラー: {e}")
-        conn_prod.close()
-        return
-
-    # --- データ取得 ---
-    if db_mode == "WEB":
-        conn_frame = sqlite3.connect(get_db_path("frame.db"))
-        try:
-            df_orders = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_frame, params=(start_key, end_key)
-            )
-        except Exception as e:
-            messagebox.showerror("エラー", f"WEB用DB読込エラー: {e}")
-            conn_prod.close()
-            conn_frame.close()
-            return
-        conn_frame.close()
-    elif db_mode == "店舗":
-        conn_fukuoka = sqlite3.connect(get_db_path("framefukuoka.db"))
-        try:
-            df_orders = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_fukuoka, params=(start_key, end_key)
-            )
-        except Exception as e:
-            messagebox.showerror("エラー", f"店舗用DB読込エラー: {e}")
-            conn_prod.close()
-            conn_fukuoka.close()
-            return
-        conn_fukuoka.close()
-    elif db_mode == "ALL":
-        conn_frame = sqlite3.connect(get_db_path("frame.db"))
-        conn_fukuoka = sqlite3.connect(get_db_path("framefukuoka.db"))
-        try:
-            df_orders_web = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_frame, params=(start_key, end_key)
-            )
-            df_orders_shop = pd.read_sql(
-                "SELECT * FROM orders WHERE (年 * 100 + 月) >= ? AND (年 * 100 + 月) <= ?",
-                conn_fukuoka, params=(start_key, end_key)
-            )
-            df_orders = pd.concat([df_orders_web, df_orders_shop], ignore_index=True)
-        except Exception as e:
-            messagebox.showerror("エラー", f"DB読込エラー: {e}")
-            conn_prod.close()
-            conn_frame.close()
-            conn_fukuoka.close()
-            return
-        conn_frame.close()
-        conn_fukuoka.close()
-    else:
-        messagebox.showerror("エラー", "データ種別を選択してください。")
-        conn_prod.close()
-        return
-
-    # --- 金額集計処理 ---
-    df_orders["年"] = pd.to_numeric(df_orders["年"], errors="coerce")
-    df_orders["月"] = pd.to_numeric(df_orders["月"], errors="coerce")
-    df_orders = df_orders.dropna(subset=["年", "月"])
-    df_orders["年月"] = df_orders["年"].astype(int).astype(str).str[-2:] + "/" + df_orders["月"].astype(int).astype(str).str.zfill(2)
-    df_orders["年月キー"] = (df_orders["年"].astype(int) * 100 + df_orders["月"].astype(int)).astype("Int64")
-    df_orders = df_orders[(df_orders["年月キー"] >= start_key) & (df_orders["年月キー"] <= end_key)]
-
-    # 商品マスタとordersを結合し、点数×金額を計算
-    df_orders["品番10"] = df_orders["品番"].astype(str).str[:10]
-    df_products["結合キー"] = df_products["品番CD"].astype(str) + "0" + df_products["カラーNO"].astype(str)
-    df_orders = pd.merge(df_orders, df_products[["結合キー", "金額"]], left_on="品番10", right_on="結合キー", how="left")
-    df_orders["金額"] = pd.to_numeric(df_orders["金額"], errors="coerce").fillna(0)
-    df_orders["点数"] = pd.to_numeric(df_orders["点数"], errors="coerce").fillna(0)
-    df_orders["売上金額"] = df_orders["点数"] * df_orders["金額"]
-
-    # 月ごとにワイド形式で集計
-    summary = (
-        df_orders.groupby(["品番10", "年月"], as_index=False)["売上金額"].sum()
-    )
-    summary_pivot = summary.pivot(index="品番10", columns="年月", values="売上金額").fillna(0).astype(int).reset_index()
-
-    # 商品マスタと結合
-    merged = pd.merge(
-        df_products,
-        summary_pivot,
-        left_on="結合キー",
-        right_on="品番10",
-        how="left"
-    )
-    month_cols = [col for col in summary_pivot.columns if col != "品番10"]
-    base_cols = ["品番CD", "商品名", "カラーNO", "カラー名", "サイズ数計", "金額", "革の種類"]
-    output_cols = base_cols + month_cols
-    merged = merged[output_cols]
-    merged[month_cols] = merged[month_cols].fillna(0).astype(int)
-    merged["売上金額合計"] = merged[month_cols].sum(axis=1)
-    output_cols = base_cols + month_cols + ["売上金額合計"]
-    merged = merged[output_cols]
-
-    # ファイル名と保存先
-    folder = os.path.join(os.path.expanduser("~"), "Downloads")
-    start_yy = str(start_year)[-2:]
-    end_yy = str(end_year)[-2:]
-    brand_for_filename = selected_brand if selected_brand != "(すべて)" else "全ブランド"
-    filename = f"商品別売上集計_金額_{brand_for_filename}_{start_yy}年{start_month}月-{end_yy}年{end_month}月_{db_mode}.xlsx"
-    full_path = os.path.join(folder, filename)
-
-    # 上書き確認
-    if os.path.exists(full_path):
-        overwrite = messagebox.askyesno("確認", f"{filename} は既に存在します。\n上書きしますか？")
-        if not overwrite:
-            messagebox.showinfo("キャンセル", "保存をキャンセルしました。")
-            conn_prod.close()
-            return
-
-    try:
-        merged.to_excel(full_path, index=False)
-        messagebox.showinfo("完了", f"✅ 商品別売上集計（金額）を出力しました：\n{full_path}")
-    except Exception as e:
-        messagebox.showerror("エラー", f"Excel出力エラー: {e}")
-    conn_prod.close()
-
 def open_upload_window():
     upload_window = tk.Toplevel()
     upload_window.title("アップロードメニュー")
@@ -1254,7 +1085,6 @@ update_filter_frame()
 
 # 商品別売上集計ダウンロードボタン
 tk.Button(window, text="商品別売上集計ダウンロード", command=lambda: download_sales_summary(selected_brand_var)).pack(pady=10)
-tk.Button(window, text="商品別売上集計（金額）ダウンロード", command=lambda: download_sales_summary_amount(selected_brand_var)).pack(pady=10)
 
 # 閉じるボタン
 tk.Button(window, text="閉じる", command=window.destroy).pack(pady=20)
