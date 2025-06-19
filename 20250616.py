@@ -80,10 +80,6 @@ def process_file(filename):
     # 列名を設定
     df_selected.columns = [name for name, index in column_indices.items() if index < len(df.columns)]
 
-    # デバッグ情報: 選択された列を確認
-    #print("デバッグ情報: 選択された列")
-    #print(df_selected.columns)
-
     # 必要に応じてデータ型を変換
     df_selected.loc[df_selected["品番"].notna(), "品番"] = (
         df_selected.loc[df_selected["品番"].notna(), "品番"]
